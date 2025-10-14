@@ -1,57 +1,107 @@
 'use client';
 
-import css from './NotesPage.module.css';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchNotes, type FetchNotesResponse } from '@/lib/api';
+import { useDebounce } from 'use-debounce';
+import { Toaster, toast } from 'react-hot-toast';
+import css from './NotesPage.module.css';
 import SearchBox from '@/components/SearchBox/SearchBox';
 import Pagination from '@/components/Pagination/Pagination';
 import NoteList from '@/components/NoteList/NoteList';
-import { useDebounce } from 'use-debounce';
-import { Toaster } from 'react-hot-toast';
+import Modal from '@/components/Modal/Modal';
+import NoteForm from '@/components/NoteForm/NoteForm';
+import { fetchNotes, type FetchNotesResponse } from '@/lib/api';
+import type { NoteTag } from '@/types/note';
 
-type Props = {
+const PER_PAGE = 12;
+const AVAILABLE_TAGS: NoteTag[] = ['Todo', 'Work', 'Personal', 'Meeting', 'Shopping'];
+
+type NotesClientProps = {
   initialTag?: string | null;
 };
 
-export default function NotesClient({ initialTag }: Props) {
+function isNoteTag(tag: string | null | undefined): tag is NoteTag {
+  return Boolean(tag && AVAILABLE_TAGS.includes(tag as NoteTag));
+}
+
+export default function NotesClient({ initialTag }: NotesClientProps) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [debounced] = useDebounce(search, 300);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [searchSubmitTick, setSearchSubmitTick] = useState(0);
+  const [debouncedSearch] = useDebounce(search, 400);
 
-  const tagForQuery = useMemo(() => {
-    if (!initialTag) return undefined;
-    if (initialTag === 'All') return undefined;
-    return initialTag as any;
-  }, [initialTag]);
+  const tagForQuery = useMemo<NoteTag | undefined>(
+    () => (isNoteTag(initialTag) ? initialTag : undefined),
+    [initialTag]
+  );
 
-  const { data, isLoading, error } = useQuery<FetchNotesResponse>({
-    queryKey: ['notes', { search: debounced, page, tag: tagForQuery }],
-    queryFn: () => fetchNotes({ search: debounced, page, perPage: 12, tag: tagForQuery as any }),
+  useEffect(() => {
+    setPage(1);
+    setSearch('');
+  }, [tagForQuery]);
+
+  const queryKey = useMemo(
+    () => ['notes', { search: debouncedSearch, page, tag: tagForQuery ?? 'All' }],
+    [debouncedSearch, page, tagForQuery]
+  );
+
+  const { data, isPending, error } = useQuery<FetchNotesResponse>({
+    queryKey,
+    queryFn: () => fetchNotes({ search: debouncedSearch, page, perPage: PER_PAGE, tag: tagForQuery }),
     keepPreviousData: true,
   });
 
-  const items = data?.items ?? [];
-  const total = data?.total ?? 0;
+  useEffect(() => {
+    if (searchSubmitTick > 0 && data && data.notes.length === 0) {
+      toast.error('Nothing was found for your request.');
+    }
+  }, [searchSubmitTick, data]);
+
+  const totalPages = data?.totalPages ?? 1;
+
+  const handlePageChange = (nextPage: number) => {
+    setPage(nextPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
+
+  const handleSearchSubmit = (_value: string) => {
+    setSearchSubmitTick((tick) => tick + 1);
+  };
+
+  const closeModal = () => setIsCreateOpen(false);
 
   return (
-    <div className={css.container}>
-      <h1 className={css.title}>Notes</h1>
-      <Toaster />
-      <SearchBox value={search} onChange={setSearch} placeholder="Search notes..." />
-      {error ? (
-        <p className={css.error}>Something went wrong.</p>
-      ) : isLoading ? (
-        <p>Loading, please wait...</p>
-      ) : (
-        <NoteList notes={items} />
+    <div className={css.app}>
+      <Toaster position="top-right" />
+
+      <header className={css.toolbar}>
+        <SearchBox value={search} onChange={handleSearchChange} onEnter={handleSearchSubmit} />
+        <button type="button" className={css.button} onClick={() => setIsCreateOpen(true)}>
+          Create note +
+        </button>
+      </header>
+
+      {isPending && <p>Loading, please wait...</p>}
+      {error && (
+        <p>
+          Could not fetch the list of notes.
+          {error instanceof Error ? ` ${error.message}` : ''}
+        </p>
       )}
-      <Pagination
-        total={total}
-        page={page}
-        perPage={12}
-        onPageChange={setPage}
-      />
+
+      <NoteList notes={data?.notes ?? []} />
+
+      <Pagination currentPage={page} totalPages={totalPages} onPageChange={handlePageChange} />
+
+      <Modal isOpen={isCreateOpen} onClose={closeModal}>
+        <NoteForm onCreated={closeModal} onCancel={closeModal} />
+      </Modal>
     </div>
   );
 }
