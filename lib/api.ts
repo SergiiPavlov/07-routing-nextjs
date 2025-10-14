@@ -9,11 +9,16 @@ export type NoteListResponse = {
   totalItems: number;
 };
 
+const resolvedBaseURL = process.env.NEXT_PUBLIC_API_BASE?.trim() || '/api/notehub';
+
+const defaultHeaders: Record<string, string> = {};
+if (!resolvedBaseURL.startsWith('/api')) {
+  defaultHeaders.Authorization = `Bearer ${process.env.NEXT_PUBLIC_NOTEHUB_TOKEN ?? ''}`;
+}
+
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE || 'https://goit-notehub.ivariv.dev',
-  headers: {
-    Authorization: `Bearer ${process.env.NEXT_PUBLIC_NOTEHUB_TOKEN ?? ''}`,
-  },
+  baseURL: resolvedBaseURL,
+  headers: defaultHeaders,
 });
 
 export function normalizeNote(data: any): Note {
