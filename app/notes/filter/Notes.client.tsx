@@ -49,13 +49,12 @@ export default function NotesClient({ initialTag }: NotesClientProps) {
   const { data, isPending, error } = useQuery<FetchNotesResponse>({
     queryKey,
     queryFn: () =>
-  fetchNotes({
-    search: debouncedSearch,            // стабильный поиск
-    page,
-    perPage: PER_PAGE,                  // используем объявленную константу
-    tag: tagForQuery                    // проверенный тег или undefined
-  }),
-
+      fetchNotes({
+        search: debouncedSearch,      // как в рабочем файле
+        page,
+        perPage: PER_PAGE,            // важно: именно PER_PAGE
+        tag: tagForQuery              // не отправляем 'All'
+      }),
     keepPreviousData: true,
   });
 
@@ -94,6 +93,13 @@ export default function NotesClient({ initialTag }: NotesClientProps) {
         </button>
       </header>
 
+      {/* Пагинация — ВВЕРХУ, над карточками (единственное изменение расположения) */}
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={handlePageChange}
+      />
+
       {isPending && <p>Loading, please wait...</p>}
       {error && (
         <p>
@@ -103,8 +109,6 @@ export default function NotesClient({ initialTag }: NotesClientProps) {
       )}
 
       <NoteList notes={data?.notes ?? []} />
-
-      <Pagination currentPage={page} totalPages={totalPages} onPageChange={handlePageChange} />
 
       <Modal isOpen={isCreateOpen} onClose={closeModal}>
         <NoteForm onCreated={closeModal} onCancel={closeModal} />
