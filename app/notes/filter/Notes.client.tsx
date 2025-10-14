@@ -48,7 +48,14 @@ export default function NotesClient({ initialTag }: NotesClientProps) {
 
   const { data, isPending, error } = useQuery<FetchNotesResponse>({
     queryKey,
-    queryFn: () => fetchNotes({ search: debouncedSearch, page, perPage: PER_PAGE, tag: tagForQuery }),
+    queryFn: () =>
+  fetchNotes({
+    search: debouncedSearch,            // стабильный поиск
+    page,
+    perPage: PER_PAGE,                  // используем объявленную константу
+    tag: tagForQuery                    // проверенный тег или undefined
+  }),
+
     keepPreviousData: true,
   });
 
