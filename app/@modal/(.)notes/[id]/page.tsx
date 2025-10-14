@@ -6,7 +6,7 @@ import Modal from '@/components/Modal/Modal';
 import NotePreview from '@/components/NotePreview/NotePreview';
 import { fetchNoteById } from '@/lib/api';
 
-export default function NotePreviewIntercept() {
+export default async function NotePreviewIntercept() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
 

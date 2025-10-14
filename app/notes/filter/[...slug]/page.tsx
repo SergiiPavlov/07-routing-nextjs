@@ -1,11 +1,11 @@
 import NotesClient from '../Notes.client';
 
 interface NotesFilterPageProps {
-  params: { slug?: string[] };
+  params: Promise<{ slug?: string[] }>;
 }
 
-export default function NotesFilterPage({ params }: NotesFilterPageProps) {
-  const { slug = [] } = params;
+export default async function NotesFilterPage({ params }: NotesFilterPageProps) {
+  const { slug = [] } = await params;
   const initialTag = slug[0] ?? 'All';
 
   return <NotesClient initialTag={initialTag} />;
