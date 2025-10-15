@@ -116,3 +116,4 @@ export default function NotesClient({ initialTag }: NotesClientProps) {
     </div>
   );
 }
+
