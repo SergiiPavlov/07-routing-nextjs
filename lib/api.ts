@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import type { Note, NoteTag } from '@/types/note';
 
 export type NoteListResponse = {
@@ -12,6 +12,7 @@ export type NoteListResponse = {
 const resolvedBaseURL = process.env.NEXT_PUBLIC_API_BASE?.trim() || '/api/notehub';
 
 const defaultHeaders: Record<string, string> = {};
+// Якщо йдемо напряму на публічний API — додаємо токен
 if (!resolvedBaseURL.startsWith('/api')) {
   defaultHeaders.Authorization = `Bearer ${process.env.NEXT_PUBLIC_NOTEHUB_TOKEN ?? ''}`;
 }
@@ -21,67 +22,65 @@ export const api = axios.create({
   headers: defaultHeaders,
 });
 
-export function normalizeNote(data: any): Note {
+// ———————————————————————————————————————————————————————————————————
+// НОРМАЛІЗАТОРИ (без any в сигнатурах)
+export function normalizeNote(data: unknown): Note {
+  const d = data as Record<string, unknown>;
   return {
-    id: String(data.id),
-    title: String(data.title ?? ''),
-    content: String(data.content ?? ''),
-    tag: (data.tag as NoteTag) ?? 'Todo',
-    createdAt: String(data.createdAt ?? ''),
-    updatedAt: String(data.updatedAt ?? ''),
+    id: String(d?.id ?? (d as any)?._id ?? ''),
+    title: String(d?.title ?? ''),
+    content: String(d?.content ?? ''),
+    tag: (d?.tag as NoteTag) ?? 'Todo',
+    createdAt: String(d?.createdAt ?? ''),
+    updatedAt: String(d?.updatedAt ?? ''),
   };
 }
 
-export function normalizeFetchResponse(data: any): NoteListResponse {
-  const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.notes) ? data.notes : [];
-  const notes: Note[] = src.map(normalizeNote);
-  const page = Number(data?.page ?? 1);
-  const perPage = Number(data?.perPage ?? 12);
-  const totalPages = Number(data?.totalPages ?? 1);
-  const totalItems = Number(data?.totalItems ?? notes.length);
-  return { page, perPage, totalPages, totalItems, notes };
+export function normalizeFetchResponse(data: unknown): NoteListResponse {
+  const d = data as Record<string, unknown>;
+  const rawItems =
+    Array.isArray((d as any)?.items) ? (d as any).items :
+    Array.isArray((d as any)?.notes) ? (d as any).notes : [];
+
+  const notes: Note[] = rawItems.map(normalizeNote);
+
+  const page = Number(d?.page ?? 1);
+  const perPage = Number(d?.perPage ?? 12);
+  const totalItems = Number(d?.totalItems ?? (d as any)?.total ?? notes.length);
+  const totalPages = Number(d?.totalPages ?? Math.max(1, Math.ceil(totalItems / Math.max(perPage, 1))));
+
+  return { page, perPage, totalItems, totalPages, notes };
 }
 
-export type FetchNotesParams = {
-  search?: string;
+// ———————————————————————————————————————————————————————————————————
+// API-ФУНКЦІЇ (з явними дженериками Axios)
+
+export async function fetchNotes(params: {
   page?: number;
   perPage?: number;
-  tag?: NoteTag; // 'All' НЕ отправляем
-};
-
-export async function fetchNotes(params: { page?: number; perPage?: number; search?: string; tag?: string } = {}) {
+  search?: string;
+  tag?: string | NoteTag;
+} = {}): Promise<NoteListResponse> {
   const { page = 1, perPage = 12, search = '', tag } = params;
-  const q: Record<string, any> = { page, perPage };
+  const q: Record<string, string | number> = { page, perPage };
   if (search && search.trim()) q.search = search.trim();
-  if (tag && tag !== 'All') q.tag = tag;
-  const res = await api.get('/notes', { params: q });
-  const data = res.data;
-  const items = Array.isArray(data?.items) ? data.items : Array.isArray(data?.notes) ? data.notes : [];
-  const totalItems = Number(data?.totalItems ?? data?.total ?? items.length);
-  const totalPages = Number(data?.totalPages ?? Math.max(1, Math.ceil(totalItems / perPage)));
-  return {
-    notes: items.map((n: any) => ({
-      id: String(n.id ?? n._id ?? ''),
-      title: String(n.title ?? ''),
-      content: String(n.content ?? ''),
-      tag: String(n.tag ?? 'Todo'),
-      createdAt: String(n.createdAt ?? n.created_at ?? ''),
-      updatedAt: String(n.updatedAt ?? n.updated_at ?? ''),
-    })),
-    page,
-    perPage,
-    totalPages,
-    totalItems,
-  };
+  if (tag && tag !== 'All') q.tag = String(tag);
+
+  const res: AxiosResponse<unknown> = await api.get<unknown>('/notes', { params: q });
+  return normalizeFetchResponse(res.data);
 }
 
 export async function fetchNoteById(id: string): Promise<Note> {
-  const res = await api.get(`/notes/${id}`);
+  const res: AxiosResponse<Note> = await api.get<Note>(`/notes/${id}`);
   return normalizeNote(res.data);
 }
 
-export async function createNote(payload: { title: string; content: string; tag: NoteTag }): Promise<Note> {
-  const res = await api.post('/notes', payload);
+export async function createNote(payload: {
+  title: string;
+  content: string;
+  tag: NoteTag;
+}): Promise<Note> {
+  const res: AxiosResponse<Note> = await api.post<Note>('/notes', payload);
   return normalizeNote(res.data);
 }
 
@@ -89,13 +88,14 @@ export async function updateNote(
   id: string,
   payload: Partial<{ title: string; content: string; tag: NoteTag }>
 ): Promise<Note> {
-  const res = await api.patch(`/notes/${id}`, payload);
+  const res: AxiosResponse<Note> = await api.patch<Note>(`/notes/${id}`, payload);
   return normalizeNote(res.data);
 }
 
-export async function deleteNote(id: string): Promise<{ success: boolean }> {
-  await api.delete(`/notes/${id}`);
-  return { success: true };
+// ⬇️ РЕВ’ЮВЕР-ВИМОГА: deleteNote має повертати об’єкт видаленої нотатки
+export async function deleteNote(id: string): Promise<Note> {
+  const res: AxiosResponse<Note> = await api.delete<Note>(`/notes/${id}`);
+  return normalizeNote(res.data);
 }
 
 export type FetchNotesResponse = NoteListResponse;
