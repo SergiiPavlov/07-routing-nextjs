@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useDebounce } from 'use-debounce';
 import { Toaster, toast } from 'react-hot-toast';
 import css from './NotesPage.module.css';
@@ -50,11 +50,12 @@ export default function NotesClient({ initialTag }: NotesClientProps) {
     queryKey,
     queryFn: () =>
       fetchNotes({
-        search: debouncedSearch,      // как в рабочем файле
+        search: debouncedSearch, // как в рабочем файле
         page,
-        perPage: PER_PAGE,            // важно: именно PER_PAGE
-        tag: tagForQuery              // не отправляем 'All'
+        perPage: PER_PAGE,       // важно: именно PER_PAGE
+        tag: tagForQuery         // не отправляем 'All'
       }),
+    // v5-эквивалент старого keepPreviousData: true
     placeholderData: keepPreviousData,
   });
 
@@ -93,7 +94,6 @@ export default function NotesClient({ initialTag }: NotesClientProps) {
         </button>
       </header>
 
-      {/* Пагинация — ВВЕРХУ, над карточками (единственное изменение расположения) */}
       <Pagination
         currentPage={page}
         totalPages={totalPages}
@@ -116,3 +116,4 @@ export default function NotesClient({ initialTag }: NotesClientProps) {
     </div>
   );
 }
+
