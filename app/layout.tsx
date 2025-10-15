@@ -7,6 +7,7 @@ import TanStackProvider from '@/components/TanStackProvider/TanStackProvider';
 export const metadata: Metadata = {
   title: 'NoteHub',
   description: 'A simple and efficient notes app on Next.js',
+  icons: { icon: '/icon.svg' },
 };
 
 
