@@ -1,7 +1,7 @@
 .container {
   display: flex;
   flex-direction: row;
-  min-height: 0; /* чтобы flex-дочерние корректно ужимались/скроллились */
+  min-height: 0; /* корректная прокрутка внутри flex */
 }
 
 .sidebar {
@@ -12,7 +12,7 @@
   display: flex;
   flex-direction: column;
   border-right: 1px solid #ddd;
-  /* при желании — «прилипшая» боковушка:
+  /* при необходимости можно вернуть "прилипание":
      position: sticky;
      top: 0;
      max-height: 100dvh;
@@ -24,5 +24,26 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-width: 0; /* предотвращаем горизонтальный скролл от длинных строк */
+  min-width: 0; /* убирает горизонтальный скролл из-за длинных строк */
+  padding-inline: 16px; /* небольшой внутренний отступ справа/слева */
+}
+
+/* ====== АДАПТИВ ====== */
+@media (max-width: 992px) {
+  .container {
+    flex-direction: column; /* логически колонка, чтобы всё тянулось по вертикали */
+  }
+  .sidebar {
+    display: none; /* прячем левый сайдбар */
+  }
+  .notesWrapper {
+    padding-inline: 12px; /* компактнее поля на мобилке */
+  }
+}
+
+/* На совсем узких экранах можно ещё уменьшить внутренние отступы */
+@media (max-width: 576px) {
+  .notesWrapper {
+    padding-inline: 8px;
+  }
 }
