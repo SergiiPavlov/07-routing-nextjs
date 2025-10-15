@@ -1,15 +1,35 @@
 'use client';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+
+import { useParams, useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
+import Modal from '@/components/Modal/Modal';
 import NotePreview from '@/components/NotePreview/NotePreview';
+import { fetchNoteById } from '@/lib/api';
 
-interface ModalNotePageProps {
-  params: Promise<{ id: string }>;
-}
+export default function NotePreviewIntercept() {
+  const router = useRouter();
+  const { id } = useParams<{ id: string }>();
 
-export default async function ModalNotePage({ params }: ModalNotePageProps) {
-  const { id } = await params;
-  // Renders a client-driven preview; fetch happens inside NotePreview
-  // We keep this as an async server boundary to comply with Next 15 params API
-  return <NotePreview id={id} />;
+  const numericId = Number(id);
+  const keyId = Number.isFinite(numericId) ? numericId : id;
+
+  const { data: note, isPending, error } = useQuery({
+    queryKey: ['note', { id: keyId }],
+    queryFn: () => fetchNoteById(id),
+    refetchOnMount: false,
+  });
+
+  const handleClose = () => router.back();
+
+  return (
+    <Modal isOpen onClose={handleClose}>
+      {isPending ? (
+        <p>Loading...</p>
+      ) : error || !note ? (
+        <p>Something went wrong.</p>
+      ) : (
+        <NotePreview note={note} onClose={handleClose} />
+      )}
+    </Modal>
+  );
 }
