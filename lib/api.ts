@@ -12,8 +12,11 @@ export type NoteListResponse = {
 const resolvedBaseURL = process.env.NEXT_PUBLIC_API_BASE?.trim() || '/api/notehub';
 
 const defaultHeaders: Record<string, string> = {};
+
+// При прямом обращении к публичному API добавляем Authorization ТОЛЬКО если токен реально есть
 if (!resolvedBaseURL.startsWith('/api')) {
-  defaultHeaders.Authorization = `Bearer ${process.env.NEXT_PUBLIC_NOTEHUB_TOKEN ?? ''}`;
+  const token = process.env.NEXT_PUBLIC_NOTEHUB_TOKEN?.trim();
+  if (token) defaultHeaders.Authorization = `Bearer ${token}`;
 }
 
 export const api = axios.create({
@@ -23,51 +26,49 @@ export const api = axios.create({
 
 export function normalizeNote(data: any): Note {
   return {
-    id: String(data.id),
-    title: String(data.title ?? ''),
-    content: String(data.content ?? ''),
-    tag: (data.tag as NoteTag) ?? 'Todo',
-    createdAt: String(data.createdAt ?? ''),
-    updatedAt: String(data.updatedAt ?? ''),
+    id: String(data?.id ?? data?._id ?? ''),
+    title: String(data?.title ?? ''),
+    content: String(data?.content ?? ''),
+    tag: (data?.tag as NoteTag) ?? 'Todo',
+    createdAt: String(data?.createdAt ?? data?.created_at ?? ''),
+    updatedAt: String(data?.updatedAt ?? data?.updated_at ?? ''),
   };
 }
 
-export function normalizeFetchResponse(data: any): NoteListResponse {
-  const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.notes) ? data.notes : [];
-  const notes: Note[] = src.map(normalizeNote);
-  const page = Number(data?.page ?? 1);
-  const perPage = Number(data?.perPage ?? 12);
-  const totalPages = Number(data?.totalPages ?? 1);
-  const totalItems = Number(data?.totalItems ?? notes.length);
-  return { page, perPage, totalPages, totalItems, notes };
-}
+export type FetchNotesResponse = NoteListResponse;
 
 export type FetchNotesParams = {
   search?: string;
   page?: number;
   perPage?: number;
-  tag?: NoteTag; // 'All' НЕ отправляем
+  tag?: NoteTag | 'All'; // 'All' НЕ отправляем на бэкенд
 };
 
-export async function fetchNotes(params: { page?: number; perPage?: number; search?: string; tag?: string } = {}) {
-  const { page = 1, perPage = 12, search = '', tag } = params;
-  const q: Record<string, any> = { page, perPage };
-  if (search && search.trim()) q.search = search.trim();
-  if (tag && tag !== 'All') q.tag = tag;
-  const res = await api.get('/notes', { params: q });
-  const data = res.data;
-  const items = Array.isArray(data?.items) ? data.items : Array.isArray(data?.notes) ? data.notes : [];
+export async function fetchNotes({
+  page = 1,
+  perPage = 12,
+  search = '',
+  tag,
+}: FetchNotesParams = {}): Promise<FetchNotesResponse> {
+  const params: Record<string, any> = { page, perPage };
+
+  if (search && search.trim()) params.search = search.trim();
+  if (tag && tag !== 'All') params.tag = tag;
+
+  const res = await api.get('/notes', { params });
+  const data = res.data ?? {};
+
+  const items = Array.isArray(data?.items)
+    ? data.items
+    : Array.isArray(data?.notes)
+      ? data.notes
+      : [];
+
   const totalItems = Number(data?.totalItems ?? data?.total ?? items.length);
   const totalPages = Number(data?.totalPages ?? Math.max(1, Math.ceil(totalItems / perPage)));
+
   return {
-    notes: items.map((n: any) => ({
-      id: String(n.id ?? n._id ?? ''),
-      title: String(n.title ?? ''),
-      content: String(n.content ?? ''),
-      tag: String(n.tag ?? 'Todo'),
-      createdAt: String(n.createdAt ?? n.created_at ?? ''),
-      updatedAt: String(n.updatedAt ?? n.updated_at ?? ''),
-    })),
+    notes: items.map(normalizeNote),
     page,
     perPage,
     totalPages,
@@ -97,5 +98,3 @@ export async function deleteNote(id: string): Promise<{ success: boolean }> {
   await api.delete(`/notes/${id}`);
   return { success: true };
 }
-
-export type FetchNotesResponse = NoteListResponse;
