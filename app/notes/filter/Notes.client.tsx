@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useDebounce } from 'use-debounce';
 import { Toaster, toast } from 'react-hot-toast';
 import css from './NotesPage.module.css';
@@ -55,7 +55,7 @@ export default function NotesClient({ initialTag }: NotesClientProps) {
         perPage: PER_PAGE,            // важно: именно PER_PAGE
         tag: tagForQuery              // не отправляем 'All'
       }),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   useEffect(() => {
