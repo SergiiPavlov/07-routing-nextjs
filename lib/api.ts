@@ -1,6 +1,7 @@
-import axios, { AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import type { Note, NoteTag } from '@/types/note';
 
+/** Canonical list response used throughout the app */
 export type NoteListResponse = {
   notes: Note[];
   page: number;
@@ -9,52 +10,70 @@ export type NoteListResponse = {
   totalItems: number;
 };
 
-const resolvedBaseURL = process.env.NEXT_PUBLIC_API_BASE?.trim() || '/api/notehub';
+/** Raw API list response shape (server can return items or notes) */
+type NoteListResponseServer = {
+  items?: Note[];
+  notes?: Note[];
+  page: number;
+  perPage: number;
+  totalPages: number;
+  totalItems: number;
+};
 
-const defaultHeaders: Record<string, string> = {};
-// Якщо йдемо напряму на публічний API — додаємо токен
-if (!resolvedBaseURL.startsWith('/api')) {
-  defaultHeaders.Authorization = `Bearer ${process.env.NEXT_PUBLIC_NOTEHUB_TOKEN ?? ''}`;
-}
+const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE ?? '').trim() || '/api/notehub';
+const DIRECT_API = /^https?:\/\//i.test(BASE_URL);
 
-export const api = axios.create({
-  baseURL: resolvedBaseURL,
-  headers: defaultHeaders,
+/** Create axios instance once */
+const api: AxiosInstance = axios.create({
+  baseURL: BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// ———————————————————————————————————————————————————————————————————
-// НОРМАЛІЗАТОРИ (без any в сигнатурах)
+/** If we call the public API directly, attach Authorization from NEXT_PUBLIC_NOTEHUB_TOKEN */
+if (DIRECT_API) {
+  const token = (process.env.NEXT_PUBLIC_NOTEHUB_TOKEN ?? '').trim();
+  if (token) {
+    api.defaults.headers.common.Authorization = `Bearer ${token}`;
+  }
+}
+
+/** ———————————————————————————————————————————————————————
+ * Normalizers (defensive in case of partial/malformed data)
+ * ——————————————————————————————————————————————————————— */
 export function normalizeNote(data: unknown): Note {
-  const d = data as Record<string, unknown>;
+  const d = (data ?? {}) as Partial<Record<string, any>>;
+  const safeTag: NoteTag =
+    d.tag && ['Todo', 'Work', 'Personal', 'Meeting', 'Shopping'].includes(String(d.tag))
+      ? (String(d.tag) as NoteTag)
+      : 'Todo';
+
   return {
-    id: String(d?.id ?? (d as any)?._id ?? ''),
-    title: String(d?.title ?? ''),
-    content: String(d?.content ?? ''),
-    tag: (d?.tag as NoteTag) ?? 'Todo',
-    createdAt: String(d?.createdAt ?? ''),
-    updatedAt: String(d?.updatedAt ?? ''),
+    id: String(d.id ?? ''),
+    title: String(d.title ?? ''),
+    content: String(d.content ?? ''),
+    tag: safeTag,
+    createdAt: String(d.createdAt ?? d.created_at ?? ''),
+    updatedAt: String(d.updatedAt ?? d.updated_at ?? ''),
   };
 }
 
-export function normalizeFetchResponse(data: unknown): NoteListResponse {
-  const d = data as Record<string, unknown>;
-  const rawItems =
-    Array.isArray((d as any)?.items) ? (d as any).items :
-    Array.isArray((d as any)?.notes) ? (d as any).notes : [];
-
-  const notes: Note[] = rawItems.map(normalizeNote);
-
-  const page = Number(d?.page ?? 1);
-  const perPage = Number(d?.perPage ?? 12);
-  const totalItems = Number(d?.totalItems ?? (d as any)?.total ?? notes.length);
-  const totalPages = Number(d?.totalPages ?? Math.max(1, Math.ceil(totalItems / Math.max(perPage, 1))));
-
-  return { page, perPage, totalItems, totalPages, notes };
+export function normalizeFetchResponse(data: NoteListResponseServer): NoteListResponse {
+  const raw = data?.items ?? data?.notes ?? [];
+  const notes = raw.map(normalizeNote);
+  const page = Number(data?.page ?? 1);
+  const perPage = Number(data?.perPage ?? 12);
+  const totalItems = Number(data?.totalItems ?? notes.length);
+  const totalPages = Number(data?.totalPages ?? Math.max(1, Math.ceil(totalItems / Math.max(perPage, 1))));
+  return { notes, page, perPage, totalItems, totalPages };
 }
 
-// ———————————————————————————————————————————————————————————————————
-// API-ФУНКЦІЇ (з явними дженериками Axios)
+/** ———————————————————————————————————————————————————————
+ * API functions (explicit Axios generics everywhere)
+ * ——————————————————————————————————————————————————————— */
 
+/** List notes with pagination, search and optional tag (omit tag when 'All') */
 export async function fetchNotes(params: {
   page?: number;
   perPage?: number;
@@ -62,28 +81,33 @@ export async function fetchNotes(params: {
   tag?: string | NoteTag;
 } = {}): Promise<NoteListResponse> {
   const { page = 1, perPage = 12, search = '', tag } = params;
-  const q: Record<string, string | number> = { page, perPage };
-  if (search && search.trim()) q.search = search.trim();
-  if (tag && tag !== 'All') q.tag = String(tag);
+  const sendTag = tag && tag !== 'All' ? String(tag) : undefined;
 
-  const res: AxiosResponse<unknown> = await api.get<unknown>('/notes', { params: q });
+  const res: AxiosResponse<NoteListResponseServer> = await api.get<NoteListResponseServer>('/notes', {
+    params: {
+      page,
+      perPage,
+      search: search || undefined,
+      tag: sendTag,
+    },
+  });
+
   return normalizeFetchResponse(res.data);
 }
 
+/** Get a single note by id */
 export async function fetchNoteById(id: string): Promise<Note> {
   const res: AxiosResponse<Note> = await api.get<Note>(`/notes/${id}`);
   return normalizeNote(res.data);
 }
 
-export async function createNote(payload: {
-  title: string;
-  content: string;
-  tag: NoteTag;
-}): Promise<Note> {
+/** Create a new note */
+export async function createNote(payload: { title: string; content: string; tag: NoteTag }): Promise<Note> {
   const res: AxiosResponse<Note> = await api.post<Note>('/notes', payload);
   return normalizeNote(res.data);
 }
 
+/** Update an existing note */
 export async function updateNote(
   id: string,
   payload: Partial<{ title: string; content: string; tag: NoteTag }>
@@ -92,7 +116,7 @@ export async function updateNote(
   return normalizeNote(res.data);
 }
 
-// ⬇️ РЕВ’ЮВЕР-ВИМОГА: deleteNote має повертати об’єкт видаленої нотатки
+/** Delete a note and return the deleted note (reviewer requirement) */
 export async function deleteNote(id: string): Promise<Note> {
   const res: AxiosResponse<Note> = await api.delete<Note>(`/notes/${id}`);
   return normalizeNote(res.data);
