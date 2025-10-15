@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 import {
   buildNotehubUrl,
   createNotehubHeaders,
@@ -6,12 +6,10 @@ import {
   relayNotehubResponse,
 } from '../../utils';
 
-type RouteContext = {
-  params: { id: string };
-};
-
-export async function GET(_req: NextRequest, { params }: RouteContext) {
-  const url = buildNotehubUrl(`/notes/${encodeURIComponent(params.id)}`);
+// Next.js 15: второй аргумент должен иметь params: Promise<...>
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const url = buildNotehubUrl(`/notes/${encodeURIComponent(String(id))}`);
 
   try {
     const response = await fetch(url, {
@@ -24,8 +22,9 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: RouteContext) {
-  const url = buildNotehubUrl(`/notes/${encodeURIComponent(params.id)}`);
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const url = buildNotehubUrl(`/notes/${encodeURIComponent(String(id))}`);
   const body = await req.text();
 
   try {
@@ -41,8 +40,9 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: RouteContext) {
-  const url = buildNotehubUrl(`/notes/${encodeURIComponent(params.id)}`);
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const url = buildNotehubUrl(`/notes/${encodeURIComponent(String(id))}`);
 
   try {
     const response = await fetch(url, {
